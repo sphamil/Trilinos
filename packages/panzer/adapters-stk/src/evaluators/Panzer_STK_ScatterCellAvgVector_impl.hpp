@@ -129,26 +129,28 @@ evaluateFields(
   // loop over the number of vector fields requested for exodus output
   for(std::size_t fieldIndex = 0; fieldIndex < scatterFields_.size(); fieldIndex++)
   {
-    PHX::MDField<const ScalarT,panzer::Cell,panzer::Point,panzer::Dim> & field = scatterFields_[fieldIndex];
-    std::string fieldName = field.fieldTag().name();
-    int numCells = field.extent(0);
-    int numPoints = field.extent(1);
-    int numDims = field.extent(2);
+    auto field_host = Kokkos::create_mirror_view(scatterFields_[fieldIndex].get_view());
+    std::string fieldName = scatterFields_[fieldIndex].fieldTag().name();
+    int numCells = field_host.extent(0);
+    int numPoints = field_host.extent(1);
+    int numDims = field_host.extent(2);
 
     for (int dim = 0; dim < numDims; dim++)
     {
-      // std::vector<double> average(numCells,0.0);
       PHX::MDField<double,panzer::Cell,panzer::NODE> average = af.buildStaticArray<double,panzer::Cell,panzer::NODE>("",numCells,1);
+      auto average_host = Kokkos::create_mirror_view(average.get_view());
 
       // write to double field
       for(int i = 0; i < numCells; i++)  // loop over cells
       {
-         average(i,0) = 0.0;
+         average_host(i,0) = 0.0;
          for(int j = 0; j < numPoints; j++)  // loop over IPs
-            average(i,0) += Sacado::scalarValue(field(i,j,dim));
+            average_host(i,0) += Sacado::scalarValue(field_host(i,j,dim));
 
-         average(i,0) /= numPoints;
+         average_host(i,0) /= numPoints;
       }
+
+      Kokkos::deep_copy(average.get_view(), average_host);
 
       double scalef = 1.0;
 
